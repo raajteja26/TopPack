@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
-import "./Form.css"
+import React, { useState,useEffect } from 'react';
+import axios from 'axios'; 
+import "./Form.css";
+import 'bootstrap/dist/css/bootstrap.min.css';
+import Navbar from "./Navbar"
 
 function App() {
   const [keyword, setKeyword] = useState('');
   const [repositories, setRepositories] = useState([]);
+  const [imported, setImported] = useState(false);
+  const [repos, setRepos] = useState([])
   
   const handleChange = (event) => {
     setKeyword(event.target.value);
@@ -12,21 +17,58 @@ function App() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      const response = await fetch(`https://api.github.com/search/repositories?q=${keyword}`);
-      const data = await response.json();
-      setRepositories(data.items);
+      const response = await axios.get(`https://api.github.com/search/repositories?q=${keyword}`);
+      setRepositories(response.data.items);
     } catch (error) {
       console.error('Error fetching repositories:', error);
     }
   }
+  const getRepoName = (url) => {
+    const parts = url.split('/');
+    return parts[parts.length - 2] + '/' + parts[parts.length - 1];
+  }
   
-  const handleImport = (url) => {
-    // Implement your import logic here
-    console.log('Importing repository:', url);
+  useEffect(() => {
+    const fetchRepos = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/repos/');
+        const namesList = response.data.map((item)=> item.name)
+        setRepos(namesList);
+      } catch (error) {
+        console.error('Error fetching repositories:', error);
+      }
+      setImported(false)
+    };
+
+    fetchRepos();
+  }, [keyword,setRepositories,imported]);
+
+  const handleImport = async (url) => {
+    try {
+      const response = await axios.get(`https://api.github.com/repos/${getRepoName(url)}/contents/package.json`);
+  
+      const packageJsonContent = atob(response.data.content);
+      const packageJson = JSON.parse(packageJsonContent);
+      const { dependencies, devDependencies } = packageJson;
+      const allPackages = { ...dependencies, ...devDependencies };
+      const packageList = Object.keys(allPackages);
+  
+      const savePackagesResponse = await axios.post('http://127.0.0.1:8000/api/save_packages/', { packageList });
+  
+      if (savePackagesResponse.status === 200) {
+        const repoName = getRepoName(url);
+        const addRepoResponse = await axios.post('http://127.0.0.1:8000/api/repos/add/', { name: repoName });
+        console.log('Response from add_repo API:', addRepoResponse.data);
+      }
+      setImported(true);
+    } catch (error) {
+      alert("np package")
+    }
   }
   
   return (
-    <div className="App">
+    <>
+    <Navbar/>
       <h1>Github Repository Search</h1>
       <form onSubmit={handleSubmit}>
         <input 
@@ -43,11 +85,17 @@ function App() {
             <h3>{repo.full_name}</h3>
             <p>Stars: {repo.stargazers_count}</p>
             <p>Forks: {repo.forks_count}</p>
-            <button onClick={() => handleImport(repo.html_url)}>Import</button>
+            <button 
+              onClick={repos.includes(repo.full_name) ? null :() => handleImport(repo.html_url)} 
+              style={{ backgroundColor:  repos.includes(repo.full_name) ? "red" : "green" }}
+              disabled={repos.includes(repo.full_name)}
+            >
+              {repos.includes(repo.full_name) ? "Imported" : "Import"}
+            </button>
           </li>
         ))}
       </ul>
-    </div>
+    </>
   );
 }
 
