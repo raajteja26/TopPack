@@ -62,7 +62,7 @@ function App() {
       }
       setImported(true);
     } catch (error) {
-      alert("np package")
+      alert("This project does not contain a package.json file.")
     }
   }
   
